@@ -14,15 +14,15 @@ const { Boom } = require("@hapi/boom");
 // === CONFIG ===
 const ownerNumber = "254768974189@s.whatsapp.net"; // Replace with your full WhatsApp ID
 
-// === DUMMY AI STATUS STORAGE ===
-let AI_ACTIVE = false;
+// === GLOBAL AI STATUS (default active) ===
+global.activateai = true; // AI is active by default
 
 function setAIStatus(status) {
-  AI_ACTIVE = status;
+  global.activateai = status;
 }
 
 function getAIStatus() {
-  return AI_ACTIVE;
+  return global.activateai;
 }
 
 // === COLOR UTILITY ===
