@@ -1,7 +1,5 @@
-// ✅ Added globally
-global.activateai = true;
-
 const sessionName = "session";
+
 
 const {
   default: dreadedConnect,
@@ -235,6 +233,11 @@ if (mek.key && mek.key.remoteJid === "status@broadcast") {
       return (decode.user && decode.server && decode.user + "@" + decode.server) || jid;
     } else return jid;
   };
+
+
+
+
+
 
   client.getName = (jid, withoutContact = false) => {
     id = client.decodeJid(jid);
