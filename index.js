@@ -1,39 +1,23 @@
 /**
  * Necromancer WhatsApp Bot Handler + Main Module
- * Merged and Updated by stackmorgan
+ * Updated by StackMorgan for your production deployment
  */
 
 require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+const fetch = require("node-fetch");
 const chalk = require("chalk");
 const pino = require("pino");
 const { Boom } = require("@hapi/boom");
-const { exec, spawn, execSync } = require("child_process");
 const PhoneNumber = require("awesome-phonenumber");
-const FileType = require("file-type");
-const express = require("express");
-
-const {
-  default: dreadedConnect,
-  useMultiFileAuthState,
-  DisconnectReason,
-  downloadContentFromMessage,
-  jidDecode,
-  proto,
-  getContentType,
-} = require("@whiskeysockets/baileys");
+const { default: dreadedConnect, useMultiFileAuthState, DisconnectReason, getContentType } = require("@whiskeysockets/baileys");
 
 // === CONFIG ===
-const ownerNumber = "254768974189@s.whatsapp.net"; // Replace with your full WhatsApp ID
-global.activateai = true; // AI is active by default
 const sessionName = "session";
+global.activateai = true; // AI is always active by default
 
-// === AI FUNCTIONS ===
-function setAIStatus(status) { global.activateai = status; }
-function getAIStatus() { return global.activateai; }
-
+// === AI REPLY FUNCTION ===
 async function aiReply(messages) {
   try {
     const systemPrompt = "You are replying as me in WhatsApp chats. Reply casually, naturally, and personally as a young, confident, funny guy. Always reply in first person as if you are me. Never mention AI, assistant, or anything robotic. Make replies feel real and authentic, with slang, jokes, emojis, and smooth compliments where relevant. Keep it short, natural, and fitting the flow of conversation. Do not sound like a chatbot or motivational speaker. Do not say 'I'm here for you' or 'let me know what's up'. Always read previous messages carefully and reply naturally to the latest one as if you are continuing the conversation seamlessly.";
@@ -42,13 +26,13 @@ async function aiReply(messages) {
       return `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content}`;
     }).join('\n');
 
-    const response = await fetch(`https://api.dreaded.site/api/chatgpt?text=${encodeURIComponent(combinedText)}`);
+    const response = await fetch("https://api.dreaded.site/api/chatgpt?text=" + encodeURIComponent(combinedText));
     const data = await response.json();
 
     if (data?.result?.prompt) {
       return data.result.prompt;
     } else {
-      return "❌ Invalid response from AI API";
+      return "😂 Sorry, brain jammed for a sec. Try again!";
     }
   } catch (err) {
     console.log("AI API error:", err);
@@ -67,93 +51,63 @@ async function initializeSession() {
   const credsPath = path.join(__dirname, 'session', 'creds.json');
 
   try {
-    const decoded = atob(session);
-    if (!fs.existsSync(credsPath) || session !== "zokk") {
-      console.log("📡 connecting...");
-      fs.writeFileSync(credsPath, decoded, "utf8");
+    if (!session || session === "zokk") {
+      console.log("❌ No valid session data found. Please pair manually.");
+      return;
     }
+
+    const decoded = Buffer.from(session, 'base64').toString('utf8');
+    const parsed = JSON.parse(decoded);
+
+    if (!fs.existsSync(credsPath)) {
+      fs.mkdirSync(path.dirname(credsPath), { recursive: true });
+      fs.writeFileSync(credsPath, JSON.stringify(parsed, null, 2), "utf8");
+      console.log("✅ Session initialized from settings.js");
+    } else {
+      console.log("✅ Session file exists. Skipping initialization.");
+    }
+
   } catch (e) {
-    console.log("Session is invalid: " + e);
+    console.log("❌ Failed to initialize session:", e.message);
   }
 }
 initializeSession();
 
-// === MESSAGE PARSER ===
-function smsg(conn, m) {
-  if (!m) return m;
-  let M = proto.WebMessageInfo;
-  if (m.key) {
-    m.id = m.key.id;
-    m.isBaileys = m.id.startsWith("BAE5") && m.id.length === 16;
-    m.chat = m.key.remoteJid;
-    m.fromMe = m.key.fromMe;
-    m.isGroup = m.chat.endsWith("@g.us");
-    m.sender = conn.decodeJid((m.fromMe && conn.user.id) || m.participant || m.key.participant || m.chat || "");
-    if (m.isGroup) m.participant = conn.decodeJid(m.key.participant) || "";
-  }
-  if (m.message) {
-    m.mtype = getContentType(m.message);
-    m.msg = m.mtype == "viewOnceMessage" ? m.message[m.mtype].message[getContentType(m.message[m.mtype].message)] : m.message[m.mtype];
-    m.body = m.message.conversation || m.msg.caption || m.msg.text || "";
-  }
-  m.text = m.msg.text || m.msg.caption || m.message.conversation || "";
-  m.reply = (text, chatId = m.chat, options = {}) =>
-    Buffer.isBuffer(text) ? conn.sendMedia(chatId, text, "file", "", m, { ...options }) : conn.sendText(chatId, text, m, { ...options });
-  return m;
-}
-
 // === MAIN BOT FUNCTION ===
-async function startHisoka() {
+async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState(`./${sessionName}`);
   const client = dreadedConnect({
     logger: pino({ level: "silent" }),
     printQRInTerminal: false,
     browser: ["backtrack", "Safari", "5.1.7"],
     markOnlineOnConnect: true,
-    version: [2, 3000, 1023223821],
     auth: state,
   });
 
   client.ev.on("messages.upsert", async (chatUpdate) => {
     try {
-      mek = chatUpdate.messages[0];
+      const mek = chatUpdate.messages[0];
       if (!mek.message) return;
-      mek.message = Object.keys(mek.message)[0] === "ephemeralMessage" ? mek.message.ephemeralMessage.message : mek.message;
 
-      if (mek.key.remoteJid.endsWith('@s.whatsapp.net')) {
-        const from = mek.key.remoteJid;
-        const mtype = getContentType(mek.message);
-        const msg = mek.message[mtype];
-        const text = msg?.text || msg?.conversation || msg?.caption || "";
+      const from = mek.key.remoteJid;
+      const mtype = getContentType(mek.message);
+      const msg = mek.message[mtype];
+      const text = msg?.text || msg?.conversation || msg?.caption || "";
 
-        console.log("From:", from, "Text:", text);
+      console.log("From:", from, "Text:", text);
 
-        // OWNER COMMANDS
-        if (from === ownerNumber && text.startsWith(".")) {
-          const command = text.trim().toLowerCase();
-          if (command === ".activateai") {
-            setAIStatus(true);
-            await client.sendMessage(from, { text: "🔮 The Necromancer AI is awake." });
-          } else if (command === ".deactivateai") {
-            setAIStatus(false);
-            await client.sendMessage(from, { text: "💀 The Necromancer AI returns to shadows." });
-          }
-          return;
-        }
+      if (global.activateai && !mek.key.fromMe) {
+        await client.sendPresenceUpdate('composing', from);
+        const history = await client.fetchMessagesFromJid(from, 5);
+        const messages = history.filter(h => h.message).map(h => ({
+          role: h.key.fromMe ? "assistant" : "user",
+          content: h.message?.conversation || h.message?.extendedTextMessage?.text || ""
+        }));
+        messages.push({ role: "user", content: text });
 
-        // AI REPLY
-        if (getAIStatus() && !mek.key.fromMe) {
-          await client.sendPresenceUpdate('composing', from);
-          const history = await client.fetchMessagesFromJid(from, 5);
-          const messages = history.filter(h => h.message).map(h => ({
-            role: h.key.fromMe ? "assistant" : "user",
-            content: h.message?.conversation || h.message?.extendedTextMessage?.text || ""
-          }));
-          messages.push({ role: "user", content: text });
-          const aiText = await aiReply(messages);
-          await client.sendMessage(from, { text: aiText });
-          await client.sendPresenceUpdate('paused', from);
-        }
+        const aiText = await aiReply(messages);
+        await client.sendMessage(from, { text: aiText });
+        await client.sendPresenceUpdate('paused', from);
       }
     } catch (err) {
       console.log(err);
@@ -165,7 +119,8 @@ async function startHisoka() {
     if (connection === "close") {
       let reason = new Boom(lastDisconnect?.error)?.output.statusCode;
       console.log(`Connection closed: ${reason}`);
-      startHisoka();
+      // No QR fallback, exit process to redeploy cleanly
+      process.exit(1);
     } else if (connection === "open") {
       console.log(color("✅ Connected successfully!", "green"));
     }
@@ -174,9 +129,10 @@ async function startHisoka() {
   client.ev.on("creds.update", saveCreds);
 }
 
-startHisoka();
+startBot();
 
 // === EXPRESS SERVER FOR KEEP ALIVE ===
+const express = require("express");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
