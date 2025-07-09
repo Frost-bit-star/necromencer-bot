@@ -6,19 +6,19 @@
 require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
-const axios = require("axios").default;
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 const chalk = require("chalk");
 const pino = require("pino");
 const { Boom } = require("@hapi/boom");
 const { exec, spawn, execSync } = require("child_process");
 const PhoneNumber = require("awesome-phonenumber");
 const FileType = require("file-type");
+const express = require("express");
 
 const {
   default: dreadedConnect,
   useMultiFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion,
   downloadContentFromMessage,
   jidDecode,
   proto,
@@ -42,17 +42,16 @@ async function aiReply(messages) {
       return `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content}`;
     }).join('\n');
 
-    const response = await axios.get("https://api.dreaded.site/api/chatgpt", {
-      params: { text: combinedText }
-    });
+    const response = await fetch(`https://api.dreaded.site/api/chatgpt?text=${encodeURIComponent(combinedText)}`);
+    const data = await response.json();
 
-    if (response.data?.result?.prompt) {
-      return response.data.result.prompt;
+    if (data?.result?.prompt) {
+      return data.result.prompt;
     } else {
       return "❌ Invalid response from AI API";
     }
   } catch (err) {
-    console.log("AI API error:", err.response?.data || err.message);
+    console.log("AI API error:", err);
     return "😂 Sorry, brain jammed for a sec. Try again!";
   }
 }
@@ -178,7 +177,6 @@ async function startHisoka() {
 startHisoka();
 
 // === EXPRESS SERVER FOR KEEP ALIVE ===
-const express = require("express");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
